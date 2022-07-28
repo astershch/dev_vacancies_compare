@@ -8,6 +8,9 @@ from dotenv import load_dotenv
 from terminaltables import AsciiTable
 
 
+SJ_DEVELOPERS_CATALOGUE_ID = 33
+
+
 def get_area_id(base_country, base_area):
     area_api_endpoint = 'https://api.hh.ru/areas'
 
@@ -57,52 +60,37 @@ def predict_rub_salary_hh(vacancy):
         return salary
 
 
-def process_vacancies(params, settings, headers=None):
+def process_sj_vacancies(url, headers, params):
     params = params.copy()
-
-    predict_func = None
-
-    if settings['platform'] == 'sj':
-        predict_func = predict_rub_salary_sj
-    elif settings['platform'] == 'hh':
-        predict_func = predict_rub_salary_hh
 
     vacancies_processed = 0
     all_salary = 0
+    params['page'] = 0
+    max_per_page = 100
+    max_vacancies = 500
 
-    found_vacancies = found_vacancies_amount(
-        headers=headers,
-        params=params,
-        settings=settings,
-    )
-
-    page_key = settings['page_key']
-    per_page_key = settings['per_page_key']
-    vacancies_key = settings['vacancies_key']
-    params[page_key] = settings['start_page']
-    max_per_page = settings['max_per_page']
-    max_vacancies = settings['max_vacancies']
+    found_vacancies = found_vacancies_amount_sj(url, headers=headers, params=params)
 
     if found_vacancies < max_vacancies:
         max_vacancies = found_vacancies
 
     if max_vacancies > max_per_page:
-        params[per_page_key] = max_per_page
+        params['count'] = max_per_page
     else:
-        params[per_page_key] = max_vacancies
+        params['count'] = max_vacancies
 
-    while params[page_key] * params[per_page_key] < max_vacancies:
-        response = requests.get(settings['api_endpoint'], headers=headers, params=params)
+    while params['page'] * params['count'] < max_vacancies:
+        response = requests.get(url, headers=headers, params=params)
         response.raise_for_status()
 
-        for vacancy in response.json()[vacancies_key]:
-            salary = predict_func(vacancy)
+        for vacancy in response.json()['objects']:
+            salary = predict_rub_salary_sj(vacancy)
 
             if salary:
                 vacancies_processed += 1
                 all_salary += salary
 
-        params[page_key] += 1
+        params['page'] += 1
 
     if vacancies_processed == 0:
         average_salary = 0
@@ -112,19 +100,65 @@ def process_vacancies(params, settings, headers=None):
     return [found_vacancies, vacancies_processed, average_salary]
 
 
-def found_vacancies_amount(params, settings, headers=None):
+def process_hh_vacancies(url, params):
     params = params.copy()
 
-    found_key = settings['found_key']
+    vacancies_processed = 0
+    all_salary = 0
+    params['page'] = 0
+    max_per_page = 100
+    max_vacancies = 2000
 
-    response = requests.get(settings['api_endpoint'], headers=headers, params=params)
+    found_vacancies = found_vacancies_amount_hh(url, params=params)
+
+    if found_vacancies < max_vacancies:
+        max_vacancies = found_vacancies
+
+    if max_vacancies > max_per_page:
+        params['per_page'] = max_per_page
+    else:
+        params['per_page'] = max_vacancies
+
+    while params['page'] * params['per_page'] < max_vacancies:
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+
+        for vacancy in response.json()['items']:
+            salary = predict_rub_salary_hh(vacancy)
+
+            if salary:
+                vacancies_processed += 1
+                all_salary += salary
+
+        params['page'] += 1
+
+    if vacancies_processed == 0:
+        average_salary = 0
+    else:
+        average_salary = all_salary // vacancies_processed
+
+    return [found_vacancies, vacancies_processed, average_salary]
+
+
+def found_vacancies_amount_sj(url, headers, params):
+    params = params.copy()
+
+    response = requests.get(url, headers=headers, params=params)
     response.raise_for_status()
 
-    return response.json()[found_key]
+    return response.json()['total']
 
 
-def print_table(title, output):
+def found_vacancies_amount_hh(url, params):
+    params = params.copy()
 
+    response = requests.get(url, params=params)
+    response.raise_for_status()
+
+    return response.json()['found']
+
+
+def get_table_format(title, output):
     table_output = [
         (
             'Язык программирования',
@@ -137,7 +171,7 @@ def print_table(title, output):
 
     table_instance = AsciiTable(table_output, title)
 
-    print(table_instance.table)
+    return table_instance.table
 
 
 def main():
@@ -159,74 +193,51 @@ def main():
     load_dotenv()
     sj_api_key = os.environ['SUPERJOB_API_KEY']
 
-    sj_vacancies_table = []
+    sj_vacancies_analytics = []
     sj_title = f'SuperJob {city}'
+    sj_api_endpoint = 'https://api.superjob.ru/2.0/vacancies/'
 
     sj_headers = {
         'X-Api-App-Id': sj_api_key,
     }
 
     sj_params = {
-        'catalogues': 33,
+        'catalogues': SJ_DEVELOPERS_CATALOGUE_ID,
         'town': city,
     }
 
-    sj_settings = {
-        'platform': 'sj',
-        'api_endpoint': 'https://api.superjob.ru/2.0/vacancies/',
-        'page_key': 'page',
-        'per_page_key': 'count',
-        'vacancies_key': 'objects',
-        'found_key': 'total',
-        'start_page': 0,
-        'max_per_page': 100,
-        'max_vacancies': 500,
-
-    }
-
-    hh_vacancies_table = []
+    hh_vacancies_analytics = []
     hh_title = f'HeadHunter {city}'
     hh_area_id = get_area_id('Russia', city)
+    hh_api_endpoint = 'https://api.hh.ru/vacancies'
 
     hh_params = {
         'area': hh_area_id,
         'period': 30,
     }
 
-    hh_settings = {
-        'platform': 'hh',
-        'api_endpoint': 'https://api.hh.ru/vacancies',
-        'page_key': 'page',
-        'per_page_key': 'per_page',
-        'vacancies_key': 'items',
-        'found_key': 'found',
-        'start_page': 0,
-        'max_per_page': 100,
-        'max_vacancies': 2000,
-    }
-
     for language in programming_languages:
         sj_params['keyword'] = language
 
-        processed_sj_vacancies = process_vacancies(
+        processed_sj_vacancies = process_sj_vacancies(
+            sj_api_endpoint,
             headers=sj_headers,
             params=sj_params,
-            settings=sj_settings,
         )
 
-        sj_vacancies_table.append(
+        sj_vacancies_analytics.append(
             (language, *processed_sj_vacancies)
         )
 
         hh_params['text'] = f'Программист {language}'
 
         try:
-            processed_hh_vacancies = process_vacancies(
+            processed_hh_vacancies = process_hh_vacancies(
+                hh_api_endpoint,
                 params=hh_params,
-                settings=hh_settings,
             )
 
-            hh_vacancies_table.append(
+            hh_vacancies_analytics.append(
                 (language, *processed_hh_vacancies)
             )
 
@@ -244,8 +255,11 @@ def main():
 
             print(exception)
 
-    print_table(sj_title, sj_vacancies_table)
-    print_table(hh_title, hh_vacancies_table)
+    sj_table = get_table_format(sj_title, sj_vacancies_analytics)
+    hh_table = get_table_format(hh_title, hh_vacancies_analytics)
+
+    print(sj_table)
+    print(hh_table)
 
 
 if __name__ == '__main__':
