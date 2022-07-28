@@ -69,7 +69,11 @@ def process_sj_vacancies(url, headers, params):
     max_per_page = 100
     max_vacancies = 500
 
-    found_vacancies = found_vacancies_amount_sj(url, headers=headers, params=params)
+    found_vacancies = found_vacancies_amount_sj(
+        url,
+        headers=headers,
+        params=params,
+    )
 
     if found_vacancies < max_vacancies:
         max_vacancies = found_vacancies
@@ -109,7 +113,10 @@ def process_hh_vacancies(url, params):
     max_per_page = 100
     max_vacancies = 2000
 
-    found_vacancies = found_vacancies_amount_hh(url, params=params)
+    found_vacancies = found_vacancies_amount_hh(
+        url,
+        params=params,
+    )
 
     if found_vacancies < max_vacancies:
         max_vacancies = found_vacancies
@@ -250,7 +257,10 @@ def main():
                     base_url = error['captcha_url']
                     query_string = urlencode(params)
 
-                    print(f'Для работы скрипта нужно пройти капчу по ссылке: {base_url}?{query_string}')
+                    print(
+                        f'Для работы скрипта нужно пройти капчу по ссылке: '
+                        f'{base_url}?{query_string}'
+                    )
                     break
 
             print(exception)
