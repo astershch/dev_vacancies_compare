@@ -9,6 +9,7 @@ from terminaltables import AsciiTable
 
 
 SJ_DEVELOPERS_CATALOGUE_ID = 33
+VACANCIES_PER_PAGE = 100
 
 
 def get_area_id(base_country, base_area):
@@ -48,40 +49,29 @@ def predict_rub_salary_sj(vacancy):
 
 
 def predict_rub_salary_hh(vacancy):
-    if vacancy.get('salary'):
-        if vacancy['salary']['currency'] != 'RUR':
-            return
+    if not vacancy.get('salary'):
+        return
 
-        salary = predict_salary(
-            vacancy['salary'].get('from'),
-            vacancy['salary'].get('to'),
-        )
+    if vacancy['salary']['currency'] != 'RUR':
+        return
 
-        return salary
+    salary = predict_salary(
+        vacancy['salary'].get('from'),
+        vacancy['salary'].get('to'),
+    )
+
+    return salary
 
 
 def process_sj_vacancies(url, headers, params):
     params = params.copy()
 
+    found_vacancies = 0
     vacancies_processed = 0
     all_salary = 0
     params['page'] = 0
-    max_per_page = 100
+    params['count'] = VACANCIES_PER_PAGE
     max_vacancies = 500
-
-    found_vacancies = found_vacancies_amount_sj(
-        url,
-        headers=headers,
-        params=params,
-    )
-
-    if found_vacancies < max_vacancies:
-        max_vacancies = found_vacancies
-
-    if max_vacancies > max_per_page:
-        params['count'] = max_per_page
-    else:
-        params['count'] = max_vacancies
 
     while params['page'] * params['count'] < max_vacancies:
         response = requests.get(url, headers=headers, params=params)
@@ -94,9 +84,13 @@ def process_sj_vacancies(url, headers, params):
                 vacancies_processed += 1
                 all_salary += salary
 
+        if not params['page']:
+            found_vacancies = response.json()['total']
+            max_vacancies = min(found_vacancies, max_vacancies)
+
         params['page'] += 1
 
-    if vacancies_processed == 0:
+    if not vacancies_processed:
         average_salary = 0
     else:
         average_salary = all_salary // vacancies_processed
@@ -107,24 +101,12 @@ def process_sj_vacancies(url, headers, params):
 def process_hh_vacancies(url, params):
     params = params.copy()
 
+    found_vacancies = 0
     vacancies_processed = 0
     all_salary = 0
     params['page'] = 0
-    max_per_page = 100
+    params['per_page'] = VACANCIES_PER_PAGE
     max_vacancies = 2000
-
-    found_vacancies = found_vacancies_amount_hh(
-        url,
-        params=params,
-    )
-
-    if found_vacancies < max_vacancies:
-        max_vacancies = found_vacancies
-
-    if max_vacancies > max_per_page:
-        params['per_page'] = max_per_page
-    else:
-        params['per_page'] = max_vacancies
 
     while params['page'] * params['per_page'] < max_vacancies:
         response = requests.get(url, params=params)
@@ -137,32 +119,20 @@ def process_hh_vacancies(url, params):
                 vacancies_processed += 1
                 all_salary += salary
 
+        if not params['page']:
+            found_vacancies = response.json()['found']
+            max_vacancies = min(found_vacancies, max_vacancies)
+
         params['page'] += 1
 
-    if vacancies_processed == 0:
+        print(params['page'], params['per_page'], found_vacancies, 'hh')
+
+    if not vacancies_processed:
         average_salary = 0
     else:
         average_salary = all_salary // vacancies_processed
 
     return [found_vacancies, vacancies_processed, average_salary]
-
-
-def found_vacancies_amount_sj(url, headers, params):
-    params = params.copy()
-
-    response = requests.get(url, headers=headers, params=params)
-    response.raise_for_status()
-
-    return response.json()['total']
-
-
-def found_vacancies_amount_hh(url, params):
-    params = params.copy()
-
-    response = requests.get(url, params=params)
-    response.raise_for_status()
-
-    return response.json()['found']
 
 
 def get_table_format(title, output):
@@ -225,6 +195,7 @@ def main():
 
     for language in programming_languages:
         sj_params['keyword'] = language
+        print(language)
 
         processed_sj_vacancies = process_sj_vacancies(
             sj_api_endpoint,
