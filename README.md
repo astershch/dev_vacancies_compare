@@ -1,5 +1,5 @@
 # Сравниваем вакансии программистов
-Скрипт позволяет сравнить средние зарплаты программистов для 10 языков программирования (JavaScript, Java, Python, PHP, C#, TypeScript, Kotlin, C++, C, Go) на сайтах hh.ru и superjob.ru.
+Скрипт позволяет сравнить средние зарплаты программистов для 10 языков программирования (JavaScript, Java, Python, PHP, C#, TypeScript, Kotlin, C++, C, Go) на сайтах [hh.ru](https://hh.ru) и [superjob.ru](https://superjob.ru).
 
 ### Как установить
 
