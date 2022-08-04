@@ -77,7 +77,9 @@ def process_sj_vacancies(url, headers, params):
         response = requests.get(url, headers=headers, params=params)
         response.raise_for_status()
 
-        for vacancy in response.json()['objects']:
+        vacancies = response.json()['objects']
+
+        for vacancy in vacancies:
             salary = predict_rub_salary_sj(vacancy)
 
             if salary:
@@ -112,7 +114,9 @@ def process_hh_vacancies(url, params):
         response = requests.get(url, params=params)
         response.raise_for_status()
 
-        for vacancy in response.json()['items']:
+        vacancies = response.json()['items']
+
+        for vacancy in vacancies:
             salary = predict_rub_salary_hh(vacancy)
 
             if salary:
@@ -124,8 +128,6 @@ def process_hh_vacancies(url, params):
             max_vacancies = min(found_vacancies, max_vacancies)
 
         params['page'] += 1
-
-        print(params['page'], params['per_page'], found_vacancies, 'hh')
 
     if not vacancies_processed:
         average_salary = 0
@@ -195,7 +197,6 @@ def main():
 
     for language in programming_languages:
         sj_params['keyword'] = language
-        print(language)
 
         processed_sj_vacancies = process_sj_vacancies(
             sj_api_endpoint,
